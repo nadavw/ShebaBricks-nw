@@ -4,13 +4,13 @@
 
 ## **Status**
 
-✅ **Approved** | Date: 2026-09-14 | Owner: Data Architecture Team
+✅ **In Progress** | Date: 2026-09-17 | Owner: Data Architecture Team
 
 ---
 
 ## **Decision**
 
-We will establish a **comprehensive, organization-wide standard** for Silver and Gold layer data products using:
+We will establish a **comprehensive, organization-wide standard** for Silver and Gold layers data products using:
 - **Lakeflow Spark Declarative Pipelines (SDP)** as the default framework
 - **SQL-first approach** with explicit schemas
 - **Serverless compute** by default
@@ -20,6 +20,52 @@ We will establish a **comprehensive, organization-wide standard** for Silver and
 - **Explicit data quality rules** on all Silver tables
 - **Rich metadata and documentation** for AI/analytics consumption
 - **Group-based permissions** and ABAC policies
+
+---
+
+## **Layer Definitions**
+
+The definition and purpose of each layer, and what tables and processes it contains:
+
+### Bronze Layer (Mirror\Raw)
+- Maintains source (operational) systems structure
+- Minimal transformation of ingested source data
+- Complete historical data retention
+- Serves as the raw landing zone for all source systems
+
+### Silver Layer (Enterprise Model)
+- Built for analytical data workload
+- Simplify data understaning
+- Clean data - deduplication, schema enforce, remove nulls etc.
+- Data quality rules
+- Conformed business data organized as an enterprise dimensional model
+- Data enrichment: joins, filters, type conversions, data cleaning, and conformance
+- Complete historical data retention
+- Information-focused: answers "What happened?" — not insights
+- Fast loading and fast refresh (minutes)
+- Rich metadata: comments, tags, and lineage in Unity Catalog
+
+### Silver Insights Sub-Layer (Complex Analytics)
+- Complex transformations, derived metrics, and time-intensive analytics built on the Silver foundation
+- Heavy aggregations across large time periods, rolling windows, statistical calculations, trend analysis, and scoring
+- Insight-focused: answers "What does it mean?"
+- Longer refresh time acceptable (hours)
+- Builds on Silver Layer; separate sub-layer to avoid slowing core Silver refresh
+- Rich metadata: comments, tags, and lineage in Unity Catalog
+
+### Gold Layer (Presentation)
+- Thin, consumer-ready presentation datasets — not a duplicate dimensional model
+- Aggregated, simplified, and optimized for specific consumers (BI, ML, apps)
+- Selects only required columns from Silver; aggregates to consumer granularity
+- May subset historical data for performance or business needs (Silver always retains full history)
+- Primary/foreign keys documented
+- Disposable and regenerable from Silver
+- Serverless compute
+- Rich metadata: comments, tags, and lineage in Unity Catalog
+
+### Multiple Tables (sub-layers) Per Layer
+
+A single layer may contain multiple tables on the same subject, organized as sub-layers, temporary or staging tables, or sequential phases within the data transformation process. The **final table** in the sequence — the last table produced in the process — is the published output of that layer. Intermediate tables serve as working steps and are not considered the layer's deliverable; they may be hidden from consumers and do not need rich metadata (comments etc.)
 
 ---
 
@@ -48,22 +94,22 @@ ShebaBricks required a comprehensive, organization-wide standard for designing, 
 ## **Scope**
 
 This standard applies to:
-- **Silver layer**: Clean, integrated, conformed, modeled business data (enterprise dimensional model) - simple, fast-loading, information-focused
-- **Silver insights sub-layer**: Complex transformations, derived metrics, and time-intensive analytics built on Silver foundation
-- **Gold layer**: Thin, consumer-ready presentation datasets (aggregated, simplified, optimized)
+- **Silver layer** and **Silver insights sub-layer**
+- **Gold layer**
 - All new Silver/Gold implementations
+
+See [Layer Definitions](#layer-definitions) above for the detailed composition, purpose, and multi-table structure of each layer.
 
 **Out of Scope**:
 - Bronze layer ingestion patterns (covered in separate ADR)
 - Ad-hoc analytics notebooks
-- ML feature engineering (separate guidance)
 - Streaming use cases requiring sub-second latency
 
 ---
 
 ## **Design Principles**
 
-1. **Silver as Source of Truth**: Silver is the authoritative, reusable enterprise model with complete historical data
+1. **Silver as Source of Truth**: Silver is the authoritative, reusable enterprise model with complete historical data.
 2. **Gold is Thin**: Gold is disposable presentation layer, not a duplicate dimensional model; may subset history for performance or business needs
 3. **Silver is Simple**: Silver contains information (cleaned, integrated data), not insights; complex analytics and derived metrics belong in silver_insights sub-layer
 4. **Explicit Over Implicit**: Explicit schemas, quality rules, and documentation required
@@ -82,42 +128,17 @@ This standard applies to:
 
 ```
 Bronze Layer (Raw/Qualified)
-  • Lakeflow Connect or Auto Loader ingestion
-  • Minimal transformation
-  • Schema enforcement
         ↓
 Silver Layer (Enterprise Model)
-  • Lakeflow SDP or Materialized Views
-  • Clean, integrated, conformed business data
-  • Dimensional model (facts + dimensions)
-  • Complete historical data retention
-  • Simple transformations, fast loading
-  • Information, not insights
-  • Explicit data quality rules
-  • Rich metadata (comments, tags, lineage)
-  • Serverless compute
         ↓
 Silver Insights Sub-Layer (Complex Analytics)
-  • Complex transformations and computations
-  • Longer processing time acceptable
-  • Derived metrics, statistical calculations
-  • Advanced analytics and aggregations
-  • Builds on Silver foundation
         ↓
 Gold Layer (Presentation)
-  • Lakeflow SDP or Materialized Views
-  • Consumer-specific aggregations
-  • Simplified relationships
-  • Subset of Silver columns and/or history
-  • Historical filtering for performance/business needs
-  • Primary/foreign keys documented
-  • Serverless compute
         ↓
 Consumers (BI, ML, Apps)
-  • Dashboards, reports, notebooks
-  • ML feature stores
-  • API endpoints
 ```
+
+> See [Layer Definitions](#layer-definitions) for the detailed composition, purpose, and multi-table structure of each layer.
 
 ### **Deployment Model**
 
@@ -189,7 +210,7 @@ Consumers (BI, ML, Apps)
 - Automatic incremental refresh where possible
 - Lower operational complexity
 - Sufficient for most batch transformation patterns
-- Definition in Git (unlike tables)
+- Definition in Git
 
 **Rejected**:
 - Streaming Tables for everything (unnecessary complexity for simple batch transforms)
@@ -338,19 +359,7 @@ Consumers (BI, ML, Apps)
 - Consumers needing raw information access Silver; consumers needing insights access silver_insights
 - Prevents Silver from becoming a bottleneck
 
-**Silver Layer**:
-- Simple joins, filters, type conversions
-- Data cleaning and conformance
-- Dimensional modeling (facts + dimensions)
-- Information: "What happened?"
-- Fast refresh (minutes)
-
-**Silver Insights Sub-Layer**:
-- Complex calculations (rolling windows, statistical metrics)
-- Heavy aggregations across large time periods
-- Advanced analytics (trend analysis, scoring)
-- Insights: "What does it mean?"
-- Longer refresh acceptable (hours)
+See [Layer Definitions](#layer-definitions) for the detailed composition and purpose of the Silver Layer and Silver Insights Sub-Layer.
 
 **Rejected**:
 - Mixing complex analytics in core Silver (creates bottleneck, slows all consumers)
@@ -360,21 +369,8 @@ Consumers (BI, ML, Apps)
 
 ---
 
-### **11. Change Data Feed (CDF) Not Mandatory**
-✅ **Decision**: CDF is optional; use only when required by specific use case semantics
-
-**Why**:
-- SDP and Materialized Views handle most incremental processing naturally
-- CDF adds storage overhead and complexity
-- Not needed unless downstream requires explicit insert/update/delete operations
-
-**Use CDF When**:
-- SCD Type 2 or bitemporal tracking required
-- Downstream system needs CDC semantics
-- Low-latency streaming with change operations
-
-**Rejected**:
-- CDF by default (unnecessary overhead for most use cases)
+### **11. Open Question — Row Change Handling (SCD Type 1/2)**:
+The exact handling of row-level changes (inserts, updates, deletes) and how to propagate them through Silver, Silver Insights, and Gold layers — including SCD Type 1 vs. Type 2 semantics, bitemporal tracking, and whether intermediate layers should retain history or apply latest-state semantics — is still under consideration. The Data Architecture Team is evaluating patterns and will publish a dedicated decision when the approach is finalized.
 
 ---
 
@@ -425,16 +421,6 @@ Consumers (BI, ML, Apps)
 
 ✅ **Compliance**: Lineage, audit logs, RLS/CLS, data classification
 
----
-
-## **Constraints**
-
-- Git repository and DAB configuration required
-- Data quality rules must be defined upfront
-- Metadata documentation is mandatory
-- Code review process for all changes
-- Exception process for deviations
-
 
 ---
 
@@ -452,89 +438,6 @@ Valid exceptions may include:
 * Performance requirements not met by standard patterns (after profiling)
 
 ---
-
-## **Benefits by Stakeholder**
-
-### **For Data Engineers**
-✅ Clear patterns to follow (reduce decision fatigue)
-
-✅ SQL-first approach (lower complexity than Spark Python)
-
-✅ Built-in observability (SDP dashboards, quality metrics)
-
-✅ Easy debugging (lineage, expectations, quarantine datasets)
-
-✅ No infrastructure management (serverless, managed services)
-
-✅ Less boilerplate (declarative > imperative)
-
----
-
-### **For Analytics Engineers**
-✅ Reliable, well-documented Silver layer (trustworthy source)
-
-✅ Fast Gold creation (thin layer, reuse Silver logic)
-
-✅ Databricks Genie support (rich metadata enables AI SQL)
-
-✅ Unity Catalog lineage (understand upstream dependencies)
-
-✅ Quality metrics (know when data issues occur)
-
----
-
-### **For Data Scientists**
-✅ Clean, modeled data (no wrangling raw files)
-
-✅ Rich metadata (understand data meaning without tribal knowledge)
-
-✅ Quality guarantees (Silver expectations prevent garbage data)
-
-✅ Fast access (optimized Silver/Gold layers, no raw file parsing)
-
----
-
-### **For BI Developers**
-✅ Gold layer tailored to use case (aggregated, simplified)
-
-✅ Primary/foreign keys documented (proper joins)
-
-✅ Fast query performance (materialized, optimized)
-
-✅ Stable schemas (explicit columns, controlled evolution)
-
----
-
-### **For Data Platform Team**
-✅ Standardized patterns (easier to support)
-
-✅ Reduced operational burden (managed services, serverless)
-
-✅ Governance by default (Unity Catalog, lineage, quality)
-
-✅ Scalable architecture (add domains/teams easily)
-
-✅ Cost visibility (tagged resources, serverless efficiency)
-
-✅ Security enforcement (group-based, ABAC policies)
-
----
-
-### **For Organization**
-✅ Regulatory compliance (lineage, audit trails, data classification)
-
-✅ Data quality tracking (measurable, reportable)
-
-✅ Fast time-to-value (templates, standards accelerate delivery)
-
-✅ Reduced maintenance cost (managed services, less custom code)
-
-✅ AI/ML readiness (governed, documented, quality data)
-
-✅ Talent flexibility (SQL skills more common than deep Spark expertise)
-
----
-
 ## **Conclusion**
 
 The **ShebaBricks Silver & Gold Engineering Standard** provides a comprehensive, modern approach to building governed, high-quality, AI-ready data products in the lakehouse. By standardizing on Lakeflow SDP, serverless compute, explicit schemas, and Unity Catalog governance, we enable teams to deliver reliable data products faster while maintaining consistency, quality, and compliance.
@@ -583,7 +486,6 @@ The **ShebaBricks Silver & Gold Engineering Standard** provides a comprehensive,
 * [Declarative Automation Bundles Guide](https://docs.databricks.com/en/dev-tools/bundles/index.html)
 * [Databricks SQL Materialized Views](https://docs.databricks.com/en/sql/language-manual/sql-ref-syntax-ddl-create-materialized-view.html)
 * [Databricks Serverless Compute](https://docs.databricks.com/en/serverless-compute/index.html)
-* ShebaBricks Silver & Gold Engineering Standard (detailed implementation guide)
 
 ---
 
