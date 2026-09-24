@@ -11,8 +11,9 @@
 
 ShebaBricks main Data Catalog Structure:
 - **Environments** - catalogs will be duplicated per environment (i.e. development, production)
-- **Technical Layer** - in Bronze layer will have one unified catalog (per environement) with schemas per source system (i.e. Namer, SAP)
-- **Business Layer** - gold & silver layers will be schemas under a business entity catalog (i.e. Ambulatry)
+- **Technical Layer** - in Bronze layer will have 2 unified catalogs - raw and qualified (per environement) with schemas per source system (i.e. Namer, SAP)
+- **Business Layer** - the structure of gold & silver layers catalogs will be **decided later based on use cases**
+- **Isolated business Catalogs** - A model for a specific use case and a specific audiance (i.e. specific labratory) will have a seperated catalog
 - **Infrastructure as code** - objects creation will not be done manualy, but defined as code
 - **Permissions** - will be granted for groups only, and based on least priviliges needed principal
 
@@ -27,7 +28,7 @@ The platform is built on Databricks with **Unity Catalog** as the centralized go
 
 ---
 
-## Access Models
+## Workspace Access Models
 
 There are three distinct access models that apply at different layers. Understanding the difference is critical for correct permission assignment.
 
@@ -38,39 +39,34 @@ There are three distinct access models that apply at different layers. Understan
 | **Workspace Access** | Ability to log in to the Databricks workspace UI, browse assets, create notebooks, and use compute | workspace group membership | data engineers |
 | **Admin Access** | Full control over workspace configuration: user and group management, compute, warehouses and permissions | Workspace admin role, account admin role | data platform admins |
 
+### Unity Catalog Permission Hierarchy
+
+In Databricks Unity Catalog, SQL access to data follows a hierarchical privilege model. To query a table, a user (or group) must hold all three of the following: `USE CATALOG` on the catalog, `USE SCHEMA` on the schema, and a table-level privilege such as `SELECT` (for read) or `ALL TABLE PRIVILEGES` (for full DML/DDL). The `USE CATALOG` and `USE SCHEMA` privileges act as gatekeepers — without them, table-level grants have no effect. This hierarchy means permissions can be granted at the catalog, schema, or table level, with each level narrowing the scope of access.
 
 
 ---
 
-## Example:
+## Example - dev:
 
 ### Development catalogs structures
 
 ```
 catalog -> schema -> tables
 
-bronze_dev
+bronze_raw_dev
     namer
         patients
         blood_tests
-        patients_qualified
-        blood_tests_qualified
     sap
         budget
         transactions
-        budget_qualified
-        transactions_qualified
-
-
-ambulatory_dev
-    silver
-        dim_patients
-        fact_blood_tests
-        fact_sap_tranactions
-    gold
-        patient_summary
-        blood_test_summary
-        blood_test_trends
+bronze_qualified_dev
+    namer
+        patients
+        blood_tests
+    sap
+        budget
+        transactions
 ```
 
 ### Production catalogs structures
@@ -78,58 +74,79 @@ ambulatory_dev
 ```
 catalog -> schema -> tables
 
-bronze
+bronze_raw
     namer
         patients
         blood_tests
-        patients_qualified
-        blood_tests_qualified
     sap
         budget
         transactions
-        budget_qualified
-        transactions_qualified
 
-
-ambulatory
-    silver
-        dim_patients
-        fact_blood_tests
-        fact_sap_tranactions
-    gold
-        patient_summary
-        blood_test_summary
-        blood_test_trends
+bronze_qualified
+    namer
+        patients
+        blood_tests
+    sap
+        budget
+        transactions
 ```
 
 
 ---
 
-## Permissions
-### Catalog: `bronze_dev`
+# Permissions
 
+## Workspace Access
+Workspace Access is granted per workspace based on Databricks group membership
 
-**Permissions (group based):**
+### Ingestion Workspace
+Only needed for Changes to ingestion procudures (new sources, handle errors)
 
-| Group | Unity Catalog Permission | Workspace Permission |
-| --- | --- | --- |
-| `data_engineers` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` | Workspace Access, Compute |
-| `data_analysts` | `USE CATALOG`, `USE SCHEMA`, `SELECT` on `table_qualified` (special cases only) | SQL Access |
-| `business_users` | No access | No access |
-| `data_platform_admins` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` | Admin Access |
+| Group | Workspace Permission |
+| --- | --- |
+| `data_ops` | Workspace Access |
+| `data_engineers` | None |
+| `data_analysts` | None |
+| `business_users` | None |
+| `data_platform_admins` | Admin Access |
+
+---
+### Analytics Workspace
+
+| Group | Workspace Permission |
+| --- | --- |
+| `data_engineers` | Workspace Access |
+| `data_analysts` | SQL Access |
+| `business_users` | Consumer Access |
+| `data_platform_admins` | Admin Access |
 
 ---
 
-### Catalog: `ambulatory` (Business Layer - Silver and Gold)
+### SQL Access (per catalog)
 
-**Permissions (group based):**
+SQL access is granted per catalog via Unity Catalog privileges. To access any table, a group must hold `USE CATALOG` + `USE SCHEMA` + the appropriate table-level privilege.
 
-| Group | Unity Catalog Permission | Workspace Permission |
-| --- | --- | --- |
-| `data_engineers` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` on `ambulatory.silver` and `ambulatory.gold` | Workspace Access, Compute |
-| `data_analysts` | `USE CATALOG`, `USE SCHEMA`, `SELECT` on `ambulatory.silver` and `ambulatory.gold` | SQL Access |
-| `business_users` | `USE CATALOG`, `USE SCHEMA`, `SELECT` on `ambulatory.gold` | consumer Access |
-| `data_platform_admins` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` on `ambulatory.silver` and `ambulatory.gold` | Admin Access |
+#### Catalog: `bronze_raw_dev`
+
+| Group | Unity Catalog Permission |
+| --- | --- |
+| `data_engineers` | `USE CATALOG`, `USE SCHEMA`, `SELECT` |
+| `data_analysts` | No access |
+| `business_users` | No access |
+| `data_platform_admins` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` |
+
+---
+
+#### Catalog: `bronze_qualified_dev`
+
+| Group | Unity Catalog Permission |
+| --- | --- |
+| `data_engineers` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` |
+| `data_analysts` | `USE CATALOG`, `USE SCHEMA`, `SELECT` on `table_qualified` (special cases only) |
+| `business_users` | No access |
+| `data_platform_admins` | `USE CATALOG`, `USE SCHEMA`, `ALL TABLE PRIVILEGES` |
+
+
 
 ---
 
@@ -149,41 +166,24 @@ ambulatory
 
 ### **2. Bronze Organized by Source System**
 
-✅ **Decision**: Bronze catalog contains one schema per source system (e.g. `namer`, `sap`), with raw and qualified tables co-located in the same schema
+✅ **Decision**: Bronze is split into two catalogs — `bronze_raw_dev` and `bronze_qualified_dev` (per environment) — each containing one schema per source system (e.g. `namer`, `sap`). Raw tables live in `bronze_raw_dev.<source>` and their qualified counterparts in `bronze_qualified_dev.<source>`.
 
-**Why**: Preserves the source system structure so data quality issues trace directly to the originating system. Co-locating raw and qualified tables in the same schema simplifies pipeline definitions (raw table and its qualified counterpart share a schema). Enables per-source permission isolation.
+**Why**: Separating raw and qualified into different catalogs enforces a clean boundary between the unfiltered landing zone and the quality-checked layer, allowing independent permission policies (e.g. `bronze_raw_dev` is more restricted). Each catalog still preserves the source system structure via per-source schemas, so data quality issues trace directly to the originating system. Pipeline definitions remain straightforward since the raw table and its qualified counterpart share the same schema name across the two catalogs.
 
 **Rejected**:
-- One schema per source per layer (e.g. `namer_raw`, `namer_qualified`): Doubles the number of schemas, adds unnecessary navigation overhead, no clear benefit since raw and qualified share the same data model
+- Single catalog with both raw and qualified tables co-located in the same schema: Weaker isolation between raw and qualified, harder to apply different permission policies, no clear lifecycle boundary
 - Single schema for all sources (e.g. `bronze.all`): Loses source system boundaries, makes it impossible to grant per-source access, complicates pipeline ownership
-- One catalog per source system (e.g. `bronze_namer`, `bronze_sap`): Catalog sprawl, Unity Catalog has a catalog limit, harder to manage at scale, requires a lot of nandling on CI\CD
+- One catalog per source system (e.g. `bronze_namer`, `bronze_sap`): Catalog sprawl, Unity Catalog has a catalog limit, harder to manage at scale, requires a lot of handling on CI\CD
 
 ---
 
-### **3. Silver and Gold Organized by Business Domain**
+### **3. Silver and Gold catalog structure**
 
-✅ **Decision**: Silver and Gold are schemas under domain catalogs (e.g. `ambulatory.silver`, `ambulatory.gold`), not separate catalogs per layer
-
-**Why**: Business consumers think in terms of domains, not source systems or medallion layers. A single domain catalog groups all related data (cleansed and curated) in one place, simplifying discovery and permission management. Adding a new domain = one new catalog with two schemas.
-
-**Rejected**:
-- One catalog per layer per domain (e.g. `ambulatory_silver`, `ambulatory_gold`): Catalog sprawl, doubles the number of catalogs, unnecessary since silver and gold share the same domain context
-- Single shared catalog for all domains (e.g. `business.silver`, `business.gold` with per-domain schemas): Loses domain boundaries, cross-domain permissions become complex, no clear ownership
-- One catalog per source system in silver/gold (e.g. `namer_silver`): Mirrors bronze structure but breaks the domain model — business users need data combined across sources, not split by source
+To be decided later based on actual use cases
 
 ---
 
-### **4. Raw and Qualified as Tables in the Same Schema**
 
-✅ **Decision**: Raw tables (e.g. `patients`) and their qualified counterparts (e.g. `patients_qualified`) live as separate tables within the same source schema in Bronze
-
-**Why**: The qualified table is a 1:1 transform of the raw table with added data quality expectations and column documentation. Keeping them in the same schema maintains the source system grouping and simplifies pipeline references. Table naming convention (`<table>` vs `<table>_qualified`) clearly distinguishes the two stages.
-
-**Rejected**:
-- Separate schemas for raw and qualified (e.g. `bronze_dev.namer_raw` and `bronze_dev.namer_qualified`): Doubles schema count, fragments the source system grouping, no benefit since both layers share the same data model
-- Views instead of qualified tables: Views cannot enforce data quality expectations or track quality metrics; the qualified layer must be materialized
-
----
 
 ### **5. Group-Based Permissions with Least Privilege**
 
@@ -228,8 +228,6 @@ This catalog structure provides a clear separation between the technical layer (
 ### **Key Principles**
 
 ✅ **Source system isolation in Bronze**
-
-✅ **Domain-driven organization in Silver and Gold**
 
 ✅ **Environment separation via catalog duplication**
 

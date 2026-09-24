@@ -374,6 +374,33 @@ The exact handling of row-level changes (inserts, updates, deletes) and how to p
 
 ---
 
+### **12. Liquid Clustering on All Silver and Gold Tables**
+✅ **Decision**: All Silver and Gold tables must use Liquid Clustering; use explicit clustering keys when known, and `CLUSTER BY AUTO` when the creator is unsure of the optimal keys
+
+**Why**:
+- Liquid Clustering is Databricks' modern replacement for partitioning and `OPTIMIZE` (Z-ORDER)
+- Self-optimizing: automatically re-clusters data as it changes, eliminating manual maintenance
+- Simplifies design: no need to choose partition columns or sort keys up front
+- Supports concurrent writes and incremental updates natively
+- Better query performance for point lookups and range scans
+- Works with Materialized Views and Streaming Tables
+
+**Guidelines**:
+- **Explicit Keys**: When the creator knows the primary access patterns, specify clustering keys explicitly (e.g., `CLUSTER BY (facility_id, admission_date)`)
+- **Auto Clustering**: When the creator does not know the correct keys to cluster by, use `CLUSTER BY AUTO` — Databricks will automatically determine and apply the optimal clustering keys
+- Prefer 1–4 clustering keys; high-cardinality columns used in point-lookup or range filters are ideal candidates
+- Avoid clustering on columns that are never or rarely filtered
+- Revisit explicit keys periodically as query patterns evolve; auto clustering adapts automatically
+
+**Rejected**:
+- Partitioning (`PARTITION BY`): requires manual design, maintenance, and can cause small-file problems with high-cardinality columns
+- Z-ORDER (`OPTIMIZE ... ZORDER BY`): manual, scheduled operation; superseded by Liquid Clustering
+- No optimization at all: degrades query performance as tables grow
+
+**Exception**: None — Liquid Clustering (explicit or auto) is mandatory on all Silver and Gold tables
+
+---
+
 ## **Implementation Standards Summary**
 
 | Category | Standard |
@@ -391,6 +418,7 @@ The exact handling of row-level changes (inserts, updates, deletes) and how to p
 | **Deployment** | Declarative Automation Bundles |
 | **Silver Insights** | Complex transformations in sub-layer (optional) |
 | **Gold** | Thin presentation layer with PK/FK documentation |
+| **Clustering** | Liquid Clustering on all Silver/Gold tables (explicit keys or `CLUSTER BY AUTO`) |
 | **Operations** | Idempotent, observable, alerting on failures |
 
 ---
