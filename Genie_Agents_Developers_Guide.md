@@ -63,16 +63,18 @@ Compare Step 1 (questions) against Step 2 (data). Find where Genie will need hel
 
 Fill the gaps from Step 3 with **instructions**, **skills**, and **examples**.
 
+
+### Semantic View
+If a gap requires combining multiple tables or embedding business logic, consider **building a semantic view** — a pre-joined, aggregated view with clear Hebrew column definitions and comments, so Genie can query it directly without complex multi-hop joins.
+
 ### Instructions (System Prompt)
-Write clear, declarative rules Genie follows when generating SQL:
+Write clear, declarative rules Genie follows when generating SQL. **Instruction should be small, focused, global and organized.** for example:
 
 > - "Revenue" always means the `revenue` column in `sales`, already net of returns.
 > - "Active customer" = at least one purchase in the last 90 days.
 > - Always exclude `is_test_account = true` records.
 > - Fiscal year starts February 1.
 
-### Semantic View
-If a gap requires combining multiple tables or embedding business logic, consider **building a semantic view** — a pre-joined, aggregated view with clear Hebrew column definitions and comments, so Genie can query it directly without complex multi-hop joins.
 
 
 
