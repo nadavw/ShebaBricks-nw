@@ -1,6 +1,6 @@
 # Genie Agent Developer Guide
 
-A practical, 7-step guide for building and maintaining Genie agents on Databricks.
+A practical, 9-step guide for building and maintaining Genie agents on Databricks.
 
 ---
 
@@ -8,11 +8,11 @@ A practical, 7-step guide for building and maintaining Genie agents on Databrick
 
 Decide **what** the agent is for before touching any data.
 
-- List the **business subjects** the agent should cover (e.g., revenue, inventory, churn).
-- For each subject, write 3–5 **example questions** a business user would ask in plain language.
-  - *"What were our top 10 products by revenue last quarter?"*
-  - *"Which regions had the highest return rate in 2024?"*
-- Identify the **audience** (executives, analysts, ops) and their expected vocabulary.
+- List the **business subjects** the agent should cover (e.g., hospitalizations, ER visits, length of stay, readmissions).
+- For each subject, write 3–5 **example questions** a business user would ask in plain Hebrew (default language).
+  - *"מה היו 10 המחלקות עם מספר האשפוזים הגבוה ביותר ברבעון האחרון?"*
+  - *"אילו מחלקות היו בעלות אחוז חזרות לאשפוז (30 יום) הגבוה ביותר ב-2024?"*
+- Identify the **audience** (department heads, medical staff, hospital management) and their expected vocabulary.
 - Keep the scope **narrow and focused** — one Genie per domain beats one mega-Genie.
 
 **Deliverable:** A one-page scope document with subjects, sample questions, and audience.
@@ -25,11 +25,11 @@ Genie can only answer what the data supports — and only *well* when the data i
 
 - Confirm every **table** and **column** the agent needs has a **Unity Catalog comment**.
   ```sql
-  ALTER TABLE catalog.schema.sales
-    COMMENT 'Daily sales transactions by product and store.';
+  ALTER TABLE catalog.schema.hospitalizations
+    COMMENT 'תיעוד אשפוזים יומי לפי מחלקה וחולה.';
   
-  ALTER TABLE catalog.schema.sales
-    ALTER COLUMN revenue COMMENT 'Net revenue in USD after discounts and returns.';
+  ALTER TABLE catalog.schema.hospitalizations
+    ALTER COLUMN length_of_stay COMMENT 'משך האשפוז בימים, מחושב כתאריך שחרור פחות תאריך קבלה.';
   ```
 - Check that column names are **human-readable** — rename cryptic names where possible.
 - Verify the data is **fresh, complete, and accurate** for the questions in scope.
@@ -47,13 +47,13 @@ Compare Step 1 (questions) against Step 2 (data). Find where Genie will need hel
 
 | Question | Data available? | Gap / Clarification needed |
 |---|---|---|
-| *Top products by revenue* | ✅ `sales` table | None |
-| *Revenue by region* | ⚠️ No `region` column | Need a mapping table or view |
-| *Churn risk score* | ❌ Not in data | Add a model output table or exclude |
+| *אשפוזים לפי מחלקה* | ✅ `hospitalizations` table | None |
+| *אשפוזים לפי מחוז* | ⚠️ No `district` column | Need a mapping table or view |
+| *סיכון לחזרה לאשפוז* | ❌ Not in data | Add a model output table or exclude |
 
-- Note **synonyms** users might use (*"turnover"* vs *"revenue"*, *"SKU"* vs *"product_id"*).
-- Note **business logic** that isn't obvious from column names (e.g., *"active customer"* = last purchase within 90 days).
-- Note **filters** users always apply (e.g., exclude test accounts, only current fiscal year).
+- Note **synonyms** users might use (*"אשפוז"* vs *"קבלה"*, *"מחלקה"* vs *"מרפאה"*).
+- Note **business logic** that isn't obvious from column names (e.g., *"חזרה לאשפוז"* = readmission within 30 days of discharge).
+- Note **filters** users always apply (e.g., exclude transfer-only episodes, only current fiscal year).
 
 **Deliverable:** A gap matrix listing every clarification Genie will need.
 
@@ -70,10 +70,10 @@ If a gap requires combining multiple tables or embedding business logic, conside
 ### Instructions (System Prompt)
 Write clear, declarative rules Genie follows when generating SQL. **Instruction should be small, focused, global and organized.** for example:
 
-> - "Revenue" always means the `revenue` column in `sales`, already net of returns.
-> - "Active customer" = at least one purchase in the last 90 days.
-> - Always exclude `is_test_account = true` records.
-> - Fiscal year starts February 1.
+> - "אשפוז" always means an episode in the `hospitalizations` table where `admission_type` is not 'ER observation'.
+> - "חזרה לאשפוז" = readmission within 30 days of discharge.
+> - Always exclude `is_transfer_only = true` records.
+> - Fiscal year starts January 1.
 
 
 
@@ -81,18 +81,18 @@ Write clear, declarative rules Genie follows when generating SQL. **Instruction 
 ### Examples (Q&A Pairs)
 Add verified example questions with their expected SQL and a short explanation:
 
-> **Q:** "Top 5 customers by revenue this year"
+> **Q:** "5 המחלקות עם משך האשפוז הממוצע הארוך ביותר השנה"
 > **SQL:**
 > ```sql
-> SELECT customer_name, SUM(revenue) AS total
-> FROM catalog.schema.sales
-> WHERE YEAR(transaction_date) = YEAR(CURRENT_DATE)
->   AND is_test_account = false
-> GROUP BY customer_name
-> ORDER BY total DESC
+> SELECT department_name, AVG(length_of_stay) AS avg_los
+> FROM catalog.schema.hospitalizations
+> WHERE YEAR(admission_date) = YEAR(CURRENT_DATE)
+>   AND is_transfer_only = false
+> GROUP BY department_name
+> ORDER BY avg_los DESC
 > LIMIT 5
 > ```
-> *Groups by customer, sums net revenue, excludes test accounts, current calendar year.*
+> *מחשב ממוצע משך אשפוז לפי מחלקה, למעט העברות פנימיות, לשנה הנוכחית.*
 
 Add **at least 5–10 examples** covering the most common question patterns.
 
@@ -100,11 +100,11 @@ Add **at least 5–10 examples** covering the most common question patterns.
 Provide reusable SQL fragments for non-obvious logic:
 
 ```sql
--- Fiscal quarter from date column
+-- חישוב רבעון פיסקלי מתאריך קבלה
 CASE
-  WHEN MONTH(date_col) IN (2,3,4)  THEN 'Q1'
-  WHEN MONTH(date_col) IN (5,6,7)  THEN 'Q2'
-  WHEN MONTH(date_col) IN (8,9,10) THEN 'Q3'
+  WHEN MONTH(admission_date) IN (1,2,3)  THEN 'Q1'
+  WHEN MONTH(admission_date) IN (4,5,6)  THEN 'Q2'
+  WHEN MONTH(admission_date) IN (7,8,9) THEN 'Q3'
   ELSE 'Q4'
 END
 ```
@@ -127,8 +127,8 @@ Define **expected correct answers** for a set of representative questions so you
 
 | # | Question | Expected result | Common mistake |
 |---|---|---|---|
-| 1 | Total revenue Q1 2024 | $4.2M (net) | Forgetting to exclude test accounts |
-| 2 | Top 3 regions by orders | West, Central, East | Using gross instead of net revenue |
+| 1 | סך אשפוזים Q1 2024 | 12,450 אשפוזים | שכחה לא לכלול העברות פנימיות |
+| 2 | 3 המחלקות עם משך האשפוז הארוך ביותר | כירורגיה, פנימית, טיפול נמרץ | שימוש בתאריך קבלה במקום שחרור לחישוב משך |
 
 **Deliverable:** A benchmark set with ≥ 10 verified questions and expected answers.
 
@@ -155,18 +155,20 @@ Run the benchmarks and fix what breaks.
 
 ---
 
-## Step 7 — Stakeholder Validation (Optional)
+## Step 7 — Stakeholder Validation
 
-Before finalizing, ask a **business stakeholder** — someone with domain knowledge but no technical/SQL background — to test the agent in their own words.
+Before finalizing, ask a **business stakeholder** — someone with domain knowledge but no technical/SQL background — to test the agent in their own words. This step is **mandatory**.
 
 - Have the stakeholder ask **5–10 questions** phrased the way they naturally would (not the benchmark wording).
+- After each answer, have the stakeholder use **Genie's built-in rating** (👍 thumbs up / 👎 thumbs down) and add comments when rating down.
 - Observe whether Genie understands the vocabulary and returns correct, useful answers.
 - Capture **new synonyms, phrasings, or edge cases** the stakeholder reveals that benchmarks missed.
 - If the stakeholder's questions surface gaps, loop back to Step 4 to add instructions, examples, or a semantic view.
+- **Do not proceed to production** until the stakeholder confirms all answers are satisfactory (no unresolved 👎 ratings).
 
 > **Rule of thumb:** If a business user can't get a correct answer in plain language, the agent isn't ready yet.
 
-**Deliverable:** Stakeholder feedback summary with any new instructions or examples added.
+**Deliverable:** Stakeholder feedback summary with thumbs up/down ratings and any new instructions or examples added.
 
 ---
 
@@ -203,7 +205,7 @@ Genie agents drift as data and usage evolve. Set up an ongoing review cadence.
 | Metric | Target | Source |
 |---|---|---|
 | Benchmark pass rate | ≥ 90% | Re-run Step 5 |
-| Failed/questioned conversations | ↓ trending | Genie history |
+| 👎 (thumbs down) ratings | ↓ trending | Genie feedback history |
 | New example questions added | Monthly | Gap analysis |
 
 **Deliverable:** A monitoring cadence and a living document tracking quality over time.
@@ -220,6 +222,6 @@ Genie agents drift as data and usage evolve. Set up an ongoing review cadence.
 | 4 | Bridge gaps | Instructions + skills + examples |
 | 5 | Benchmark | 10–20 verified Q&A pairs |
 | 6 | Test & iterate | All benchmarks passing |
-| 7 | Stakeholder validation *(optional)* | Business-user feedback + refinements |
+| 7 | Stakeholder validation | Business-user feedback + 👍/👎 ratings |
 | 8 | Move to production | Agent live with access + announcement |
 | 9 | Monitor | Weekly/monthly review cadence |
