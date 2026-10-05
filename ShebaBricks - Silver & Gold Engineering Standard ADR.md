@@ -33,6 +33,16 @@ The definition and purpose of each layer, and what tables and processes it conta
 - Complete historical data retention
 - Serves as the raw landing zone for all source systems
 
+### Iron Layer (Internal Staging) — Optional
+- **Optional layer**: used only when Silver construction requires intermediate staging tables or when troubleshooting is needed
+- Internal staging tables used as intermediate steps to produce Silver tables
+- Sits between Bronze and Silver; not a deliverable layer
+- Used for troubleshooting and diagnosing what went wrong during Silver construction
+- Internal only: not viewable by or accessible to end users
+- Does not require comments, tags, or rich metadata
+- Hidden from consumers in Unity Catalog
+- Disposable and regenerable from Bronze
+
 ### Silver Layer (Enterprise Model)
 - Built for analytical data workload
 - Simplify data understaning
@@ -45,12 +55,13 @@ The definition and purpose of each layer, and what tables and processes it conta
 - Fast loading and fast refresh (minutes)
 - Rich metadata: comments, tags, and lineage in Unity Catalog
 
-### Silver Insights Sub-Layer (Complex Analytics)
+### Sterling Layer (Complex Analytics) — Optional
+- **Optional layer**: used only when Silver contains complex, time-intensive transformations that would slow core Silver refresh
 - Complex transformations, derived metrics, and time-intensive analytics built on the Silver foundation
 - Heavy aggregations across large time periods, rolling windows, statistical calculations, trend analysis, and scoring
 - Insight-focused: answers "What does it mean?"
 - Longer refresh time acceptable (hours)
-- Builds on Silver Layer; separate sub-layer to avoid slowing core Silver refresh
+- Builds on Silver Layer; separate layer to avoid slowing core Silver refresh
 - Rich metadata: comments, tags, and lineage in Unity Catalog
 
 ### Gold Layer (Presentation)
@@ -94,16 +105,18 @@ ShebaBricks required a comprehensive, organization-wide standard for designing, 
 ## **Scope**
 
 This standard applies to:
-- **Silver layer** and **Silver insights sub-layer**
+- **Iron layer** (internal staging between Bronze and Silver)
+- **Silver layer** and **Sterling layer**
 - **Gold layer**
 - All new Silver/Gold implementations
 
-See [Layer Definitions](#layer-definitions) above for the detailed composition, purpose, and multi-table structure of each layer.
+See [Layer Definitions](#layer-definitions) above for the detailed composition, purpose, and multi-table structure of each layer, including the Iron internal staging layer.
 
 **Out of Scope**:
 - Bronze layer ingestion patterns (covered in separate ADR)
 - Ad-hoc analytics notebooks
 - Streaming use cases requiring sub-second latency
+- End-user access to the Iron layer (internal staging only)
 
 ---
 
@@ -111,7 +124,7 @@ See [Layer Definitions](#layer-definitions) above for the detailed composition, 
 
 1. **Silver as Source of Truth**: Silver is the authoritative, reusable enterprise model with complete historical data.
 2. **Gold is Thin**: Gold is disposable presentation layer, not a duplicate dimensional model; may subset history for performance or business needs
-3. **Silver is Simple**: Silver contains information (cleaned, integrated data), not insights; complex analytics and derived metrics belong in silver_insights sub-layer
+3. **Silver is Simple**: Silver contains information (cleaned, integrated data), not insights; complex analytics and derived metrics belong in sterling layer
 4. **Explicit Over Implicit**: Explicit schemas, quality rules, and documentation required
 5. **SQL-First**: Prefer SQL for readability and maintainability; Python only when justified
 6. **Governance by Default**: Unity Catalog metadata, lineage, and permissions are mandatory
@@ -119,6 +132,7 @@ See [Layer Definitions](#layer-definitions) above for the detailed composition, 
 8. **Version Everything**: All production code in Git with proper CI/CD
 9. **Quality is Non-Negotiable**: Every Silver table has explicit quality rules
 10. **AI-Ready**: Rich metadata enables Databricks Genie and AI-powered analytics
+11. **Iron and Sterling are Optional**: Iron (internal staging) and Sterling (complex analytics) layers are used only when needed — not every pipeline requires them
 
 ---
 
@@ -129,9 +143,11 @@ See [Layer Definitions](#layer-definitions) above for the detailed composition, 
 ```
 Bronze Layer (Raw/Qualified)
         ↓
+Iron Layer (Internal Staging)
+        ↓
 Silver Layer (Enterprise Model)
         ↓
-Silver Insights Sub-Layer (Complex Analytics)
+Sterling Layer (Complex Analytics)
         ↓
 Gold Layer (Presentation)
         ↓
@@ -150,8 +166,24 @@ Consumers (BI, ML, Apps)
 
 ## **Key Design Decisions**
 
+### **0. Iron Layer for Internal Staging**
+✅ **Decision**: Introduce an optional Iron layer between Bronze and Silver to hold internal staging tables used in constructing Silver tables and for troubleshooting. Use only when needed — not every Silver pipeline requires an Iron staging layer
+
+**Why**:
+- Provides a controlled workspace for intermediate transformations before Silver
+- Enables debugging and root-cause analysis when Silver construction fails
+- Keeps Silver clean by isolating staging logic in a separate, internal layer
+- Internal only: not exposed to end users, no comments or metadata required
+- Disposable and regenerable from Bronze
+
+**Rejected**:
+- Performing all staging inside Silver (pollutes the enterprise model, harder to debug)
+- Using Bronze directly for staging (Bronze mirrors source structure, not designed for transformation staging)
+
+---
+
 ### **1. Lakeflow SDP as Default Framework**
-✅ **Decision**: Use Lakeflow Spark Declarative Pipelines (SDP) as the default framework for Silver and Gold transformations
+✅ **Decision**: Use Lakeflow Spark Declarative Pipelines (SDP) as the default framework for Iron, Silver, and Gold transformations
 
 **Why**: 
 - Built-in data quality Expectations with severity levels
@@ -169,7 +201,7 @@ Consumers (BI, ML, Apps)
 ---
 
 ### **2. SQL-First with Explicit Schemas**
-✅ **Decision**: SQL is the default language
+✅ **Decision**: SQL is the default language (including Iron staging)
 
 **Why**:
 - Readability and maintainability for broader team
@@ -203,7 +235,7 @@ Consumers (BI, ML, Apps)
 ---
 
 ### **4. Materialized Views as Default Dataset Type**
-✅ **Decision**: Prefer Materialized Views for most Silver/Gold datasets; use Streaming Tables when incremental semantics are natural
+✅ **Decision**: Prefer Materialized Views for most Silver/Gold datasets; use Streaming Tables when incremental semantics are natural (Iron staging tables follow the same pattern)
 
 **Why**:
 - Simpler mental model (like a cached view)
@@ -266,7 +298,7 @@ Consumers (BI, ML, Apps)
 ---
 
 ### **7. Rich Metadata for AI Readiness**
-✅ **Decision**: Every Silver and Gold table/column must have meaningful comments; Unity Catalog tags recommended
+✅ **Decision**: Every Silver and Gold table/column must have meaningful comments; Unity Catalog tags recommended (Iron layer exempt — no comments or tags required)
 
 **Why**:
 - Enables Databricks Genie (AI-powered SQL generation)
@@ -289,7 +321,7 @@ Consumers (BI, ML, Apps)
 ---
 
 ### **8. Group-Based Permissions and ABAC**
-✅ **Decision**: Group-based permissions only; ABAC policies for consistent row filtering and column masking
+✅ **Decision**: Group-based permissions only; ABAC policies for consistent row filtering and column masking; Iron layer restricted to data engineering teams only
 
 **Why**:
 - Scalable permission management
@@ -349,17 +381,17 @@ Consumers (BI, ML, Apps)
 
 ---
 
-### **10. Silver Insights Sub-Layer for Complex Transformations**
-✅ **Decision**: Separate complex, time-intensive transformations into a `silver_insights` sub-layer; keep core Silver simple and fast-loading
+### **10. Sterling Layer for Complex Transformations**
+✅ **Decision**: Separate complex, time-intensive transformations into an optional `sterling` layer; keep core Silver simple and fast-loading. Use only when Silver would otherwise be slowed by heavy computations — not every domain requires a Sterling layer
 
 **Why**:
 - Silver should load quickly and provide foundational information
 - Complex computations (statistical analysis, heavy aggregations, derived metrics) can slow Silver refresh
 - Separation enables different refresh schedules and compute resources
-- Consumers needing raw information access Silver; consumers needing insights access silver_insights
+- Consumers needing raw information access Silver; consumers needing insights access sterling
 - Prevents Silver from becoming a bottleneck
 
-See [Layer Definitions](#layer-definitions) for the detailed composition and purpose of the Silver Layer and Silver Insights Sub-Layer.
+See [Layer Definitions](#layer-definitions) for the detailed composition and purpose of the Silver Layer and Sterling Layer.
 
 **Rejected**:
 - Mixing complex analytics in core Silver (creates bottleneck, slows all consumers)
@@ -370,12 +402,12 @@ See [Layer Definitions](#layer-definitions) for the detailed composition and pur
 ---
 
 ### **11. Open Question — Row Change Handling (SCD Type 1/2)**:
-The exact handling of row-level changes (inserts, updates, deletes) and how to propagate them through Silver, Silver Insights, and Gold layers — including SCD Type 1 vs. Type 2 semantics, bitemporal tracking, and whether intermediate layers should retain history or apply latest-state semantics — is still under consideration. The Data Architecture Team is evaluating patterns and will publish a dedicated decision when the approach is finalized.
+The exact handling of row-level changes (inserts, updates, deletes) and how to propagate them through Silver, Sterling, and Gold layers — including SCD Type 1 vs. Type 2 semantics, bitemporal tracking, and whether intermediate layers should retain history or apply latest-state semantics — is still under consideration. The Data Architecture Team is evaluating patterns and will publish a dedicated decision when the approach is finalized.
 
 ---
 
 ### **12. Liquid Clustering on All Silver and Gold Tables**
-✅ **Decision**: All Silver and Gold tables must use Liquid Clustering; use explicit clustering keys when known, and `CLUSTER BY AUTO` when the creator is unsure of the optimal keys
+✅ **Decision**: All Silver and Gold tables must use Liquid Clustering; use explicit clustering keys when known, and `CLUSTER BY AUTO` when the creator is unsure of the optimal keys (Iron staging tables are exempt — clustering optional)
 
 **Why**:
 - Liquid Clustering is Databricks' modern replacement for partitioning and `OPTIMIZE` (Z-ORDER)
@@ -397,7 +429,7 @@ The exact handling of row-level changes (inserts, updates, deletes) and how to p
 - Z-ORDER (`OPTIMIZE ... ZORDER BY`): manual, scheduled operation; superseded by Liquid Clustering
 - No optimization at all: degrades query performance as tables grow
 
-**Exception**: None — Liquid Clustering (explicit or auto) is mandatory on all Silver and Gold tables
+**Exception**: None for Silver and Gold — Liquid Clustering (explicit or auto) is mandatory. Iron staging tables are exempt.
 
 ---
 
@@ -416,9 +448,10 @@ The exact handling of row-level changes (inserts, updates, deletes) and how to p
 | **Security** | Group-based permissions, ABAC policies |
 | **Version Control** | Git for all production code |
 | **Deployment** | Declarative Automation Bundles |
-| **Silver Insights** | Complex transformations in sub-layer (optional) |
+| **Iron** | Optional internal staging between Bronze and Silver (no comments, not user-facing) |
+| **Sterling** | Optional complex transformations layer |
 | **Gold** | Thin presentation layer with PK/FK documentation |
-| **Clustering** | Liquid Clustering on all Silver/Gold tables (explicit keys or `CLUSTER BY AUTO`) |
+| **Clustering** | Liquid Clustering on all Silver/Gold tables (explicit keys or `CLUSTER BY AUTO`); Iron exempt |
 | **Operations** | Idempotent, observable, alerting on failures |
 
 ---
@@ -476,7 +509,7 @@ The **ShebaBricks Silver & Gold Engineering Standard** provides a comprehensive,
 
 ✅ **Gold is Thin** (disposable presentation layer; may subset history)
 
-✅ **Silver is Simple** (information not insights; complex analytics in silver_insights)
+✅ **Silver is Simple** (information not insights; complex analytics in sterling)
 
 ✅ **Explicit Over Implicit** (schemas, quality, documentation)
 
@@ -494,11 +527,14 @@ The **ShebaBricks Silver & Gold Engineering Standard** provides a comprehensive,
 
 ✅ **Performance Through Simplicity** (serverless, managed optimization)
 
+✅ **Debuggability** (Iron staging layer isolates troubleshooting from production layers)
+
 ---
 
 ## **Related Decisions**
 
 * [ADR: ShebaBricks Multi-Domain Ingestion Framework](#) (Bronze layer standards)
+* Iron Layer internal staging conventions and access controls
 * Unity Catalog Naming Conventions and Organization Structure
 * CI/CD Pipeline Configuration and Deployment Automation
 * Monitoring and Alerting Infrastructure
