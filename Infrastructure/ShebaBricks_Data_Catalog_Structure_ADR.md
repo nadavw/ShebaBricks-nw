@@ -60,7 +60,7 @@ bronze_raw_dev
     sap
         budget
         transactions
-bronze_qualified_dev
+bronze_dev
     namer
         patients
         blood_tests
@@ -82,7 +82,7 @@ bronze_raw
         budget
         transactions
 
-bronze_qualified
+bronze
     namer
         patients
         blood_tests
@@ -137,7 +137,7 @@ SQL access is granted per catalog via Unity Catalog privileges. To access any ta
 
 ---
 
-#### Catalog: `bronze_qualified_dev`
+#### Catalog: `bronze_dev`
 
 | Group | Unity Catalog Permission |
 | --- | --- |
@@ -166,7 +166,7 @@ SQL access is granted per catalog via Unity Catalog privileges. To access any ta
 
 ### **2. Bronze Organized by Source System**
 
-✅ **Decision**: Bronze is split into two catalogs — `bronze_raw_dev` and `bronze_qualified_dev` (per environment) — each containing one schema per source system (e.g. `namer`, `sap`). Raw tables live in `bronze_raw_dev.<source>` and their qualified counterparts in `bronze_qualified_dev.<source>`.
+✅ **Decision**: Bronze is split into two catalogs — `bronze_raw_dev` and `bronze_dev` (per environment) — each containing one schema per source system (e.g. `namer`, `sap`). Raw tables live in `bronze_raw_dev.<source>` and their qualified counterparts in `bronze_dev.<source>`.
 
 **Why**: Separating raw and qualified into different catalogs enforces a clean boundary between the unfiltered landing zone and the quality-checked layer, allowing independent permission policies (e.g. `bronze_raw_dev` is more restricted). Each catalog still preserves the source system structure via per-source schemas, so data quality issues trace directly to the originating system. Pipeline definitions remain straightforward since the raw table and its qualified counterpart share the same schema name across the two catalogs.
 
