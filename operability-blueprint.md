@@ -96,34 +96,34 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 
 ## 4. Phased Maturity Roadmap
 
-### Phase 1: Current (This Week)
+### Phase 1: 04/10/2026 - 08/10/2026
 **Exit criteria:** Users in groups, clusters have policies, pipelines in Git, cost visible, JFrog integrated, SAT deployed, AI Gateway live.
 
 **Key milestones per domain:**
 
 | Domain | Key Milestones | Owner | Days |
 |---|---|---|---|
-| PlatformOps | | | |
-| SecOps | | | |
-| DataOps | | | |
-| DevOps | | | |
-| FinOps | | | |
+| PlatformOps | SQL Warehouse cluster created via Admin Bundel | Chen | |
+| SecOps | Account-level groups created + synced to workspaces (`data_platform_admins`, `data_engineers`) | Chen | |
+| DataOps |Creating Catalogs and Schema via Admin Bundle | Chen | |
+| DevOps | Creating Example Bundle| Chen | |
+| FinOps | Budget alerts configured (`budget_all_dev`: $500/$1K/$2K monthly thresholds) | Chen |
 | MLOps | TBD | | |
 | AIOps | | | |
 
-### Phase 2: Next
+### Phase 2: 11/10/2026 - 22/10/2026
 **Exit criteria:** CI/CD for all code, PHI masked, DQ expectations in pipelines, cost attributed, team trained, LLM translation optimized, Genie ZeroOps approach adopted.
 
 **Key milestones per domain:**
 
-| Domain | Key Milestones | Owner |
-|---|---|---|
-| PlatformOps | | |
-| SecOps | | |
-| DataOps | | |
-| DevOps | | |
-| FinOps | | |
-| MLOps | TBD | |
+| Domain | Key Milestones | Owner | Days |
+|---|---|---|---|
+| PlatformOps | Tagging strategy| Chen, Nadav, Avi ||
+| SecOps | SQL alerts for rules violations (TBD)| Chen |1|
+| DataOps | | ||
+| DevOps | Run Dashboard based on pipelines event log | Chen | 2|
+| FinOps | Usage Dashboard (By Job/team/workspace) | Chen | 1|
+| MLOps |  | |
 | AIOps | | |
 
 **Genie ZeroOps:** In next phases, adopt the Genie ZeroOps approach for automated Genie operations — self-managing Genie Agents with automated quality monitoring, drift detection, and remediation. See [Introducing Genie ZeroOps](https://www.databricks.com/blog/introducing-genie-zeroops).
