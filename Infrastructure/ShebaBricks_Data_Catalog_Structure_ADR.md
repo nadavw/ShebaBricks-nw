@@ -177,9 +177,36 @@ SQL access is granted per catalog via Unity Catalog privileges. To access any ta
 
 ---
 
-### **3. Silver and Gold catalog structure**
+### **3. Silver and Gold Organized by Domain (Business Catalogs)**
 
-To be decided later based on actual use cases
+✅ **Decision**: Each business domain or project gets its own catalog, with Silver and Gold represented as schemas within that catalog (per environment). For example, an `hr` catalog contains `silver` and `gold` schemas (`hr_dev` / `hr` for dev and prod respectively). Permissions for each domain catalog are granted to a domain-specific group (e.g. `hr_analysts`), allowing per-domain least-privilege access control.
+
+```
+catalog -> schema -> tables
+
+hr_dev                          # Development catalog for the HR domain
+    silver                      # Curated, conformed business data
+        employees
+        departments
+    gold                       # Presentation-ready, use-case specific data
+        headcount_by_department
+        payroll_summary
+
+hr                              # Production catalog for the HR domain
+    silver
+        employees
+        departments
+    gold
+        headcount_by_department
+        payroll_summary
+```
+
+**Why**: Organizing Silver and Gold by domain mirrors how the business operates — each domain (e.g. HR, Finance, Ambulatory) owns its data, use cases, and user community. Keeping Silver and Gold as schemas in the same catalog maintains a clear lineage path from curated to presentation-ready while letting domain teams manage their own catalog. Per-domain groups provide fine-grained access: a user granted to `hr_analysts` can access the `hr` catalog, but nothing from other domains. This scales cleanly as new domains are onboarded by creating a new catalog and a corresponding group.
+
+**Rejected**:
+- Single `silver` and `gold` catalog shared across all domains: Monolithic catalog, broad permission grants that cross domain boundaries, no per-domain ownership or access control
+- Separate catalog per layer (`silver`, `gold`) with schemas per domain: Splits lineage and ownership across two catalogs, adds complexity for a single domain team that needs to manage both layers
+- Separate catalog per use case within a domain (e.g. `hr_payroll`, `hr_headcount`): Catalog sprawl, hard to manage at scale, and crosses the boundary between a domain's curated and presentation data
 
 ---
 
