@@ -128,6 +128,22 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 
 **Genie ZeroOps:** In next phases, adopt the Genie ZeroOps approach for automated Genie operations — self-managing Genie Agents with automated quality monitoring, drift detection, and remediation. See [Introducing Genie ZeroOps](https://www.databricks.com/blog/introducing-genie-zeroops).
 
+
+### Phase 3: 25/10/2026 - 05/11/2026
+**Exit criteria:** Production environment ready, CI/CD between dev and prod
+
+**Key milestones per domain:**
+
+| Domain | Key Milestones | Owner | Days |
+|---|---|---|---|
+| PlatformOps | | ||
+| SecOps | prod permissions| Chen ||
+| DataOps | prod data objects | ||
+| DevOps | CI\CD automation, prod monitoring, alerts | Chen | |
+| FinOps | prod usage monitoring | Chen | |
+| MLOps |  | |
+| AIOps | | |
+
 ---
 
 ## 5. Tool Stack
