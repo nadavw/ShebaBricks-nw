@@ -33,6 +33,12 @@
 | **Workspace & Platform** | OneDataAI -> Internal | UC governance, cluster policies, CI/CD (DABs), JFrog integration, SAT/LakeWatch, AI Gateway, Genie/Dashboards/Apps governance, monitoring, enablement |
 | **Shared** | AllCloud + OneDataAI | IaC parameters, initial UC setup, network troubleshooting, on-prem connectivity, incident response, AWS Secrets Manager access policies |
 
+### Value & Delivery
+
+**Value:** Eliminates ambiguity between AllCloud, OneDataAI, and the internal team. Prevents gaps where nobody owns a critical task (e.g., UC governance, secrets, monitoring). Enables faster incident routing -- each party knows immediately if an issue is infra (AllCloud), workspace/platform (OneDataAI), or shared. Without this, a medical center with two external partners gets "I thought they were handling that" on PHI access governance, cluster cost control, or AI Gateway configuration.
+
+**Delivery:** RACI is signed off by all three parties and management. Communicated during onboarding for every new team member. Referenced during incident triage to determine ownership. Reviewed when scope changes (e.g., OneDataAI to internal ownership transition).
+
 ---
 
 ## 3. Operability Domains
@@ -63,6 +69,7 @@ Pipeline reliability, data quality, lineage, observability.
 - Failure handling: retries, alerting (Teams/email), dead-letter patterns
 - Schema drift detection for Epic upgrades
 - Pipeline health dashboard (LakeWatch-powered)
+- Semantic layer: create and maintain UC metric views (business KPIs), UC domains, schema annotations, column descriptions — the data engineering foundation for Genie Ontology
 
 ### DevOps
 Code-to-production lifecycle, CI/CD, shared libraries, templates.
@@ -71,6 +78,7 @@ Code-to-production lifecycle, CI/CD, shared libraries, templates.
 - CI/CD: automated testing, PR-based review, code quality gates (SQLFluff, Black/Ruff)
 - Shared libraries via JFrog (on-prem connectors, PHI masking, data quality utilities)
 - Starter templates: on-prem SQL extraction, file share ingestion, reporting pipeline, Apps deployment
+- Semantic layer CI/CD: metric views, Pages, and domain definitions version-controlled and deployed via DABs
 
 ### FinOps
 Cost visibility, budget monitoring, optimization, chargeback.
@@ -92,6 +100,67 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 - RAG infrastructure (Vector Search) for future GenAI use cases (Next phase)
 - LLM API keys in AWS Secrets Manager; egress via controlled firewall (coordinate with AllCloud)
 
+### Data Product Ops
+Consumer-facing data products (Genie One, Genie Agents, AI/BI Dashboards, Databricks Apps) — lifecycle, quality, performance, usage analytics, ZeroOps.
+- Genie One ops: adoption monitoring (active business users, session frequency), answer quality across all agents, discovery experience (can users find the right agent/dashboard?), ontology integration from consumer perspective
+- Genie Agent ops: quality monitoring (answer accuracy, hallucination detection), confidence voting, trusted asset management, drift detection
+- Dashboard ops: data freshness, load performance, usage analytics, lifecycle management (create -> update -> retire)
+- Apps ops: health monitoring (uptime, response time, error rates), lifecycle management, performance optimization
+- Consumer usage analytics: adoption tracking, satisfaction metrics, question success rates
+- Consumer-facing SLAs: define and monitor SLAs for Genie response time, dashboard load time, app availability
+- Genie ZeroOps: automated self-managing Genie operations — quality monitoring, drift detection, automated remediation (https://www.databricks.com/blog/introducing-genie-zeroops)
+- Semantic layer quality: Genie Ontology monitoring — inferred context snippet accuracy, authority scoring, conflict resolution, certification workflows, Pages governance (business term definitions), ontology drift detection (https://docs.databricks.com/aws/en/genie/genie-ontology, https://www.databricks.com/blog/operationalizing-genie-ontology-your-data-stack)
+
+**Semantic Layer Glossary:**
+
+| Term | Plain-Language Explanation |
+|---|---|
+| **Genie Ontology** | Databricks' unified context layer that gives Genie a business-aware map of your organization. Combines human-defined context (UC semantics) with auto-extracted context (inferred snippets). |
+| **Inferred context snippet** | A piece of business knowledge Genie automatically extracts from your existing assets (dashboards, queries, Genie Agents, metric views) — e.g., "revenue = sum of sales_amount where status = closed". |
+| **Snippet accuracy** | Whether an auto-extracted snippet correctly represents the business logic it was extracted from. Wrong snippets lead to wrong Genie answers. |
+| **Authority score** | A ranking Genie assigns to each snippet based on source (certified metric view > ad-hoc query), usage frequency, and freshness. Higher authority snippets win when there are conflicting definitions. |
+| **Conflict resolution** | When two snippets define the same metric differently (e.g., two teams define 'active patient' differently), Genie uses authority score to pick the right one. Data Product Ops monitors and resolves these conflicts. |
+| **Certification workflow** | The process of marking a data asset (metric view, table) as trusted/authoritative. Certified assets get higher authority scores, steering Genie toward vetted definitions. |
+| **Pages governance** | Pages are governed, human-authored definitions of business concepts (e.g., 'What counts as a readmission?'). Data Product Ops owns the accuracy and lifecycle of these definitions. |
+| **Ontology drift detection** | Monitoring whether the semantic layer is becoming stale — e.g., a metric view references a column that was renamed, or a business rule changed but the Page wasn't updated. |
+
+### Notification Strategy
+Cross-cutting delivery layer for all operability domains. Destinations configured once by PlatformOps at workspace level; all domains reference them.
+
+**Notification Destinations** — *TBD: no decision yet on which destinations to adopt.*
+
+Databricks supports the following destination types (all admin-configured at workspace level). The routing table below is a proposal — final destination selection per severity is pending.
+
+**Destination Options (HL):**
+- **Email** — Built-in, zero-setup. Good for audit trails and non-urgent summaries. Low visibility (easy to ignore). No on-call escalation.
+- **Microsoft Teams** — Webhook-based or Genie app. Real-time visibility in team channels. Good for collaborative triage. Requires channel governance (one per domain). Not suitable for on-call paging.
+- **Slack** — Webhook-based or Genie app. Similar to Teams but different org stack. Only relevant if Slack is the org standard (TBD vs. Teams).
+- **PagerDuty** — Purpose-built for on-call incident management. Acknowledgement, escalation policies, on-call schedules. Overkill for low-severity alerts. Best for critical prod-only.
+- **Webhook** — Generic HTTP POST to any endpoint. Maximum flexibility (ITSM, custom runbooks, auto-remediation). Requires custom receiver infrastructure. Phase 3+.
+
+**Proposed Routing Rules (pending destination decision):**
+
+| Severity | Event Examples | Candidate Destination | Domains |
+|---|---|---|---|
+| Critical | Prod pipeline failure, PHI access violation, AI Gateway down | PagerDuty + Teams/Slack | DataOps, SecOps, AIOps |
+| High | Non-prod job failure, budget threshold exceeded, token budget alert | Teams/Slack | DataOps, FinOps, AIOps |
+| Medium | DQ expectation failure, stale data, query perf degradation | Teams/Slack (per-domain channel) | DataOps, PlatformOps |
+| Low | Cost trend, idle cluster, audit summary | Email | FinOps, PlatformOps, SecOps |
+
+**Event Sources:**
+- Job/pipeline built-in notifications (run failure, flow-level failure, maintenance start/complete)
+- Databricks SQL Alerts (scheduled query + threshold condition → TRIGGERED / OK / ERROR)
+- System tables + SQL Alerts (account-wide: billing spikes, audit anomalies, job-run failures, query duration)
+- AI Gateway token/budget alerts
+
+**Open Decision:** Which destination(s) to adopt and in which phase. Input needed from org IT / SecOps on existing collaboration tool (Teams vs. Slack) and incident management tool (PagerDuty vs. existing ITSM).
+
+**Principles (destination-agnostic):**
+- One channel per domain for routing clarity (whatever chat tool is chosen)
+- Alert on sustained trends, not single points (avoid alert fatigue)
+- Notify on recovery (OK) for critical alerts only
+- Phase 1: email + chat tool (TBD which) · Phase 2: add on-call paging for prod · Phase 3: add webhook for ITSM
+
 ---
 
 ## 4. Phased Maturity Roadmap
@@ -108,8 +177,10 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 | DataOps |Creating Catalogs and Schema via Admin Bundle | Chen | |
 | DevOps | Creating Example Bundle| Chen | |
 | FinOps | Budget alerts configured (`budget_all_dev`: $500/$1K/$2K monthly thresholds) | Chen |
+| PlatformOps | Notification destination decision made + configured (TBD which); routing rules documented | Chen |
 | MLOps | TBD | | |
 | AIOps | | | |
+| Data Product Ops | | | |
 
 ### Phase 2: 11/10/2026 - 22/10/2026
 **Exit criteria:** CI/CD for all code, PHI masked, DQ expectations in pipelines, cost attributed, team trained, LLM translation optimized, Genie ZeroOps approach adopted.
@@ -125,6 +196,7 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 | FinOps | Usage Dashboard (By Job/team/workspace) | Chen | 1|
 | MLOps |  | |
 | AIOps | | |
+| Data Product Ops | | |
 
 **Genie ZeroOps:** In next phases, adopt the Genie ZeroOps approach for automated Genie operations — self-managing Genie Agents with automated quality monitoring, drift detection, and remediation. See [Introducing Genie ZeroOps](https://www.databricks.com/blog/introducing-genie-zeroops).
 
@@ -143,6 +215,7 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 | FinOps | prod usage monitoring | Chen | |
 | MLOps |  | |
 | AIOps | | |
+| Data Product Ops | | |
 
 ---
 
@@ -154,6 +227,7 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 | CI/CD | DABs + GitHub Actions or Azure DevOps |
 | Orchestration | Databricks Jobs + SDP |
 | Governance | Unity Catalog |
+| Semantic Layer (business context) | UC Semantics: Metric Views, Domains, Pages, Certification/Deprecation + Genie Ontology (inferred context) |
 | Secrets | AWS Secrets Manager-backed scopes |
 | Identity | EntraID + SCIM |
 | Package Management | JFrog (Artifactory, private PyPI) |
@@ -167,6 +241,7 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 | Genie Agents | Databricks Genie (AI/BI) |
 | Dashboards | Databricks AI/BI Dashboards |
 | Apps | Databricks Apps |
+| Notifications | Databricks Notification Destinations (TBD which: Email, Teams/Slack, PagerDuty, Webhook) |
 | Code Quality | SQLFluff (SQL) + Black/Ruff (Python) |
 
 ---
@@ -201,6 +276,7 @@ AI Gateway (Unity Gateway), multi-LLM routing, guardrails, token monitoring.
 | FinOps | Visibility | Active |
 | MLOps | TBD | TBD |
 | AIOps | CRITICAL (LLM translation) | Critical |
+| Data Product Ops | Foundational | Active |
 
 ---
 
