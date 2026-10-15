@@ -43,6 +43,13 @@
 
 ## 3. Operability Domains
 
+The 8 domains split into two layers:
+
+- **Technical Operability** (7 domains: PlatformOps, SecOps, DataOps, DevOps, FinOps, MLOps, AIOps) — keeping the platform running. Owned by platform engineering (OneDataAI to internal). Success metrics: uptime, cost/DBU, pipeline success rate, security compliance. Customer: data engineers, developers.
+- **Business Operability** (1 domain: Data Product Ops) — ensuring data products deliver value. Owned by data product owners / business analysts. Success metrics: Genie answer accuracy, dashboard adoption, consumer satisfaction, ontology quality. Customer: business users (doctors, department heads, hospital management).
+
+The semantic layer bridges both: DataOps creates metric views and annotations (technical), Data Product Ops governs ontology quality and Pages (business). This split matters because technical operability needs infrastructure skills, while business operability needs domain expertise — someone who knows what 'readmission' means clinically, not just how the pipeline works.
+
 ### PlatformOps
 Workspace admin, compute governance, connectivity, JFrog, SAT/LakeWatch, Genie/Dashboards/Apps config.
 - Cluster policies by team/purpose (min 3: small/medium/no-unrestricted); enforce auto-termination, max workers
